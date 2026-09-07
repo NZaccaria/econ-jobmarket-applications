@@ -246,6 +246,29 @@ def test_tickbox_columns_are_real_headers():
         assert name in S.APP_HEADERS, name
 
 
+def test_no_local_name_shadows_the_col_helper():
+    """`for col, width in ...` inside format_applications shadowed the module
+    level col() helper, so formatting the Applications tab raised
+    UnboundLocalError. Nothing caught it because it needs a live spreadsheet."""
+    src = (Path(__file__).resolve().parent / "sheet.py").read_text(encoding="utf-8")
+    offenders = [ln.strip() for ln in src.splitlines()
+                 if re.match(r"\s*for\s+col\b", ln) or re.match(r"\s*col\s*=", ln)]
+    assert not offenders, f"these rebind the col() helper: {offenders}"
+
+
+def test_column_widths_reference_real_headers():
+    """Width tables are keyed by header name; a typo would raise at runtime
+    inside a Sheets call, which no unit test reaches."""
+    import sheet as S
+    src = (Path(__file__).resolve().parent / "sheet.py").read_text(encoding="utf-8")
+    for block, headers in (("widths = {", S.INBOX_HEADERS),
+                           ("app_widths = {", S.APP_HEADERS)):
+        chunk = src[src.index(block):]
+        chunk = chunk[:chunk.index("}")]
+        for name in re.findall(r'"([^"]+)":', chunk):
+            assert name in headers, f"{name!r} is not a header"
+
+
 def test_apps_script_headers_exist_in_python():
     """The spreadsheet button resolves columns by header NAME, so the names it
     needs must exist in sheet.py. Renaming a header there would otherwise break

@@ -99,6 +99,9 @@ def ensure_tabs(sh):
         # safe here precisely because we only reach it when it is not a tracker.
         apps.update(values=[APP_HEADERS], range_name="A2")
         apps.update(values=[["Last updated:"]], range_name="A1")
+        # Style it now rather than at the first promote, so a freshly set up
+        # sheet does not look broken until you have applied to something.
+        format_applications(sh, apps, 0)
 
     for tab in (INBOX, PARKED):
         if tab not in titles:
@@ -292,10 +295,13 @@ def format_applications(sh, apps, n_rows: int) -> None:
     reqs.append({"updateSheetProperties": {
         "properties": {"sheetId": sid, "gridProperties": {"frozenRowCount": 2}},
         "fields": "gridProperties.frozenRowCount"}})
-    for col, width in ((4, 220), (6, 170), (7, 230), (8, 150), (12, 90), (19, 200)):
+    app_widths = {"Institution": 220, "Department": 170, "Position": 230,
+                  "Field": 150, "Application URL": 90, "Notes": 200}
+    for name, width in app_widths.items():
+        idx = col(APP_HEADERS, name)
         reqs.append({"updateDimensionProperties": {
             "range": {"sheetId": sid, "dimension": "COLUMNS",
-                      "startIndex": col, "endIndex": col + 1},
+                      "startIndex": idx, "endIndex": idx + 1},
             "properties": {"pixelSize": width}, "fields": "pixelSize"}})
     reqs += _link_url_column(apps, n_rows)
     sh.batch_update({"requests": reqs})
