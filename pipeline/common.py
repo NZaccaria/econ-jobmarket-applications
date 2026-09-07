@@ -27,8 +27,11 @@ def sheet_id() -> str:
     sid = load_config().get("sheet_id")
     if not sid or sid.startswith("PUT_YOUR"):
         sys.exit(
-            "No sheet_id. Put your spreadsheet id in 00_pipeline/config.yml "
-            "under sheet_id, or set the SHEET_ID environment variable."
+            "No sheet_id set.\n"
+            "  Put your spreadsheet id in config.yml under sheet_id, or set the\n"
+            "  SHEET_ID environment variable. Take it from the sheet's URL:\n"
+            "  docs.google.com/spreadsheets/d/<THIS PART>/edit\n"
+            "  To work without Google at all, add --no-sheet."
         )
     return sid
 
@@ -137,8 +140,18 @@ def save_state(cfg, state: dict) -> None:
 # Google Sheets
 # --------------------------------------------------------------------------
 
+_SHEET_CACHE = None
+
+
 def open_sheet():
-    """Authorised handle on the placement spreadsheet."""
+    """Authorised handle on the spreadsheet, cached for the process.
+
+    Cached because a single run opens it more than once, and each call is a
+    fresh OAuth exchange plus an open-by-key round trip.
+    """
+    global _SHEET_CACHE
+    if _SHEET_CACHE is not None:
+        return _SHEET_CACHE
     import gspread
     from google.oauth2.service_account import Credentials
 
@@ -147,8 +160,12 @@ def open_sheet():
         env = json.loads(_env_key()) if _env_key() else None
         if env is None:
             sys.exit(
-                f"No credentials. Expected {key} or the GOOGLE_SERVICE_ACCOUNT "
-                "environment variable (used by the GitHub Action)."
+                f"No Google credentials found.\n"
+                f"  Expected {key.name} in {key.parent}, or the "
+                f"GOOGLE_SERVICE_ACCOUNT environment variable (used by CI).\n"
+                f"  To work without Google at all, run:  "
+                f"python3 {key.parent.name}/fetch.py --no-sheet\n"
+                f"  Setup instructions are in the README, Level 1."
             )
         creds = Credentials.from_service_account_info(
             env, scopes=["https://www.googleapis.com/auth/spreadsheets"]
@@ -157,7 +174,8 @@ def open_sheet():
         creds = Credentials.from_service_account_file(
             str(key), scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
-    return gspread.authorize(creds).open_by_key(sheet_id())
+    _SHEET_CACHE = gspread.authorize(creds).open_by_key(sheet_id())
+    return _SHEET_CACHE
 
 
 def _env_key():

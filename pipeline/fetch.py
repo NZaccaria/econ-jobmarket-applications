@@ -35,6 +35,11 @@ def main() -> int:
     args = ap.parse_args()
 
     cfg = C.load_config()
+    # Fail before spending 30 seconds fetching: a missing credential or sheet
+    # id is the most likely first-run mistake, and finding out at the end is a
+    # miserable way to learn it.
+    if not args.no_sheet and not args.dry_run:
+        C.open_sheet()
     state = C.load_state(cfg)
     catalog = C.load_catalog(cfg)
 
