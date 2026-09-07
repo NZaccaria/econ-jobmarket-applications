@@ -1,0 +1,175 @@
+# The Google Sheet this pipeline reads and writes. Take it from the URL:
+#   docs.google.com/spreadsheets/d/<THIS PART>/edit
+# Not needed at all for the CSV-only mode (fetch.py --no-sheet).
+# The GitHub Action reads the SHEET_ID environment variable instead.
+sheet_id: PUT_YOUR_SHEET_ID_HERE
+
+# Pipeline knobs. Edit this file, not the code.
+#
+# Guiding rule: nothing is ever deleted or hidden. Every listing ever seen stays
+# in openings.csv. Scoring decides ORDER and how much tailoring effort a listing
+# deserves. It never decides whether you get to see it.
+
+sources:
+  joe: true            # aeaweb.org/joe/listings  (XLSX export, the reliable one)
+  ejm: true            # econjobmarket.org/positions  "All regular postings"
+  ejm_ra: true         # econjobmarket.org/market  the RA / pre-doc board.
+                       # Everything on it lands in the skip bucket, but it is
+                       # fetched anyway so nothing is invisible. Set false to
+                       # stop seeing it at all.
+
+# ---------------------------------------------------------------------------
+# Category rules
+#
+# These are the only rules that demote a listing, and they are about CATEGORY,
+# not field: a job for someone who already has a PhD vs. one that is not.
+# Anything matching lands in the "skip" bucket. It is still listed, still
+# promotable, just unticked by default in the review page.
+# Comment out a line to stop demoting that category.
+# ---------------------------------------------------------------------------
+skip_categories:
+  - predoc            # pre-doctoral fellow, research assistant (pre-doc)
+  - phd_student       # doctoral student / PhD positions
+  - adjunct           # adjunct, part-time, summer associate
+  - internship
+  - senior_only       # full/chair professorship with no junior rank in the ad
+
+# Patterns driving the categoriser, tested against the job TITLE (and, on EJM,
+# its category column, which is a real taxonomy). These are regular expressions
+# matched case-insensitively. They use \b word boundaries deliberately: plain
+# substring matching made "intern" fire inside "International" and demoted 40
+# tenure-track jobs. Edit with that in mind.
+#
+# They are tested in the order listed below, first match wins.
+# senior_only is decided in code, not here: it needs to check the WHOLE title for
+# a junior rank, and a forward-only regex lookahead cannot (it wrongly skipped
+# "Assistant, Associate, or Full Professor", where "Assistant" comes first).
+senior_terms: ['\b(full|chair) professor(ship)?\b', '\bprofessorship\b.*\(w[23]\)', '\bw3\b']
+junior_terms: ['\bassistant\b', '\btenure[- ]track\b', '\bjunior\b', '\bopen rank\b',
+               '\blecturer\b', '\bpost-?doc\w*\b']
+
+category_patterns:
+  adjunct:     ['\badjunct\b', '\bsummer associate\b', '\bap reader\b']
+  postdoc:     ['\bpost-?doc\w*\b', '\bpost-?doctoral\b']
+  predoc:      ['\bpre-?doc\w*\b', '\bresearch assistant\b(?! professor)']
+  # "PhD" alone in a title almost always means "a PhD is required", not "this is
+  # a student post": PhD Economist (NY Fed) and Brattle's PhD track are real jobs.
+  phd_student: ['\bphd (positions?|students?|candidates?|fellowships?)\b',
+                '\bdoctoral (students?|researchers?|positions?)\b']
+  internship:  ['\bintern(ship)?s?\b']
+  faculty:     ['\bassistant professor\b', '\bassociate professor\b', '\bprofessor\b',
+                '\blecturer\b', '\btenure\b', '\bfaculty\b']
+  economist:   ['\beconomist\b', '\beconometrician\b', '\bresearch fellow\b',
+                '\bfellow\b']
+
+# ---------------------------------------------------------------------------
+# Scoring: ordering only.
+# ---------------------------------------------------------------------------
+
+# Scoring has four parts, added together. Each contributes a named amount, and
+# every listing carries a "Why" column in the Inbox showing its breakdown, so a
+# score you disagree with can always be traced to the line that caused it.
+#
+#   score = geography + field + role + research match
+#
+# Research match is deliberately the SMALLEST and hardest-capped part. An early
+# version let it stack tier1+tier2+tier3, so a Fintech ad in Guangzhou listing
+# every field at once scored highest of anything on the board. Only the single
+# best tier now counts.
+
+scoring:
+
+  # 1. Where the job is. Europe and the US first.
+  geography:
+    priority: 12
+    secondary: 5      # Canada sits here, not in priority. Move it up one list
+                      # if you would rather treat it like the US.
+    rest: 0
+    priority_countries:
+      [United States, United Kingdom, Ireland, Germany, France, Italy, Spain,
+       Netherlands, Belgium, Switzerland, Austria, Sweden, Norway, Denmark,
+       Finland, Portugal, Greece, Poland, Czechia, Czech Republic, Hungary,
+       Luxembourg, Cyprus, Estonia, Latvia, Lithuania, Slovakia, Slovenia,
+       Croatia, Romania, Bulgaria, Iceland, Malta]
+    secondary_countries:
+      [Canada, Australia, New Zealand, Singapore, Israel, Japan,
+       South Korea, Korea, Hong Kong, United Arab Emirates]
+
+  # 2. Is this actually an economics post. A finance, accounting, business or
+  #    fintech department is a different job, however good the ad looks.
+  field:
+    economics: 14
+    adjacent: 7       # public policy, ag econ, political economy, econometrics
+    other: 0
+    economics_terms: ['\beconomics?\b', '\beconometric\w*\b']
+    adjacent_terms:  ['\bpublic policy\b', '\bpublic affairs\b', '\bagricultural\b',
+                      '\bpolitical economy\b', '\bpolicy\b', '\bstatistics\b']
+    other_terms:     ['\bfinance\b', '\bfinancial\b', '\bfintech\b', '\baccounting\b',
+                      '\bbusiness\b', '\bmanagement\b', '\bmarketing\b',
+                      '\boperations research\b', '\bsupply chain\b', '\binsurance\b',
+                      '\breal estate\b', '\blaw\b', '\bnursing\b', '\bengineering\b']
+
+  # 3. What rank. A pure junior opening beats one bundled with senior hires,
+  #    where you are competing against established people.
+  role:
+    assistant: 12
+    postdoc: 10
+    open_rank: 10     # names Assistant alongside Associate/Full. An open-rank ad
+                      # is not a worse job, it just means competing against more
+                      # senior people, so it sits level with a postdoc and above
+                      # a policy economist post.
+    economist: 8      # central bank, IMF, OECD, policy institution
+    other: 0
+
+  # 4. Alignment with profile.md. Best matching tier only, never stacked.
+  match:
+    tier1: 8
+    tier2: 5
+    tier3: 2
+    open_field: 8     # an open-field ad is a good thing: any field is welcome,
+                      # so it counts as much as a direct tier1 hit rather than
+                      # as a small consolation bonus.
+    cap: 12
+
+# Research keywords and JEL tiers are NOT here. They live in
+# 00_pipeline/profile.md, in one editable yaml block, because that file also
+# describes the research to the tailor-cover-letter skill and having two lists
+# drift apart would be worse than having one.
+
+
+# Bucket cutoffs. A/B/C are only a convenience grouping over the score, so they
+# must be re-checked against the live distribution whenever a weight changes,
+# using the block in PIPELINE.md. Skip is separate and not score-based.
+bucket_cutoffs:
+  A: 44
+  B: 30
+
+# ---------------------------------------------------------------------------
+# Housekeeping
+# ---------------------------------------------------------------------------
+
+# Listings whose deadline is already past on the day of the run are marked
+# "expired" and drop out of the review page. They stay in openings.csv.
+drop_expired: true
+
+# Sanity check. If a source returns fewer than this fraction of what it
+# returned last run, the run refuses to write and shouts instead. This is the
+# guard against a silently broken parser writing an empty catalogue.
+min_fraction_of_last_run: 0.5
+
+paths:
+  catalog: openings.csv
+  ads: ads
+  state: state.json
+
+# Cross-source duplicate detection. The same job is often on both JOE and EJM.
+# Deadlines are NOT compared: the two sites routinely disagree about them.
+duplicates:
+  institution_similarity: 0.93   # fuzzy match on the full institution name
+  title_similarity: 0.90
+  token_overlap: 0.60
+  # Ad body text is NOT thresholded: the two sites format ads so differently
+  # that Brown's identical posting scores 0.07 similarity. Body text is used
+  # only to decide which listing pairs with which when one employer runs
+  # several near-identical ads. The hard gate is the deadline: it must match
+  # exactly, or nothing collapses.

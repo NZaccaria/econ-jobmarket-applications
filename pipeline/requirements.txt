@@ -1,0 +1,9 @@
+# Pinned so a breaking upstream release cannot silently break the nightly run.
+# Bump deliberately, then run 00_pipeline/test_pipeline.py.
+requests==2.32.5
+beautifulsoup4==4.14.3
+pandas==3.0.0
+openpyxl==3.1.5
+gspread==6.2.1
+google-auth==2.57.1
+PyYAML==6.0.3

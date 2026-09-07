@@ -1,0 +1,17 @@
+# Credentials: never commit. Rotating the key in Google Cloud is the only fix
+# if one ever lands in history, because deleting the file leaves the blob.
+pipeline/service_account.json
+service_account*.json
+*.json.key
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# NOTE: pipeline/openings.csv, state.json and ads/ are deliberately NOT ignored.
+# They are your catalogue, and the nightly GitHub Action commits them so the
+# run has memory of what it saw yesterday. They simply are not in this template.
