@@ -11,10 +11,13 @@ name: Fetch job listings
 # runway to be finished before a 08:30 start. It also matters that it lands
 # overnight: fetch.py rewrites the Inbox tab wholesale, and a run firing
 # mid-review would clobber ticks you had just made.
+# The schedule is commented out on purpose. Uncomment it once you have added
+# the GOOGLE_SERVICE_ACCOUNT and SHEET_ID secrets (see the README), otherwise
+# it runs nightly, fails for lack of credentials, and emails you about it.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 1 * * *"   # 01:00 UTC = 03:00 Amsterdam (CEST) / 02:00 (CET)
+  # schedule:
+  #   - cron: "0 1 * * *"   # 01:00 UTC = 03:00 Amsterdam (CEST) / 02:00 (CET)
 
 permissions:
   contents: write

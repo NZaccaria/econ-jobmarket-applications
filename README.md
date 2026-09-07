@@ -171,6 +171,9 @@ gh secret set SHEET_ID --body "<your sheet id>"
 gh workflow run daily.yml     # run it once now, to check it works
 ```
 
+Then **uncomment the `schedule:` lines** in `.github/workflows/daily.yml`. They
+ship commented out, so that a clone without secrets does not fail every night.
+
 It then runs nightly at 01:00 UTC. One run costs about 1 minute of the 2000
 free monthly minutes GitHub gives private repositories.
 
