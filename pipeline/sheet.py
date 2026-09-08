@@ -176,31 +176,30 @@ def _write_rows(sh, ws, pending: list[dict], default_tick: bool,
             "Added": r.get("first_seen", ""), "uid": uid,
         }))
 
-    # An empty Inbox is ambiguous: nothing new, or the job never ran? Say so
-    # in the tab itself, since that is the only place the answer is looked for.
-    placeholder = not body and note
-    if placeholder:
-        body = [row_from(INBOX_HEADERS, {"Institution": note})]
+    # The status line is ALWAYS the first row, not only when the tab is empty.
+    # With listings still sitting unreviewed, "no new row" and "the job never
+    # ran" look identical, and that is exactly when you want to tell them apart.
+    # It carries no uid, so read_ticks and the Apps Script both ignore it, and
+    # it is excluded from the tickbox range.
+    status = [row_from(INBOX_HEADERS, {"Institution": note})] if note else []
 
     ws.clear()
-    ws.update(values=[INBOX_HEADERS] + body, range_name="A1",
+    ws.update(values=[INBOX_HEADERS] + status + body, range_name="A1",
               value_input_option="USER_ENTERED")
-    # n_rows 0 for a placeholder: it must not get a tickbox, and it carries no
-    # uid so read_ticks and the Apps Script both ignore it.
-    _format_inbox(sh, ws, 0 if placeholder else len(body))
+    _format_inbox(sh, ws, len(body), offset=len(status))
 
 
-def _format_inbox(sh, inbox, n_rows: int) -> None:
+def _format_inbox(sh, inbox, n_rows: int, offset: int = 0) -> None:
     """Real checkboxes in column A, frozen header, sensible widths."""
     sid = inbox.id
     reqs = _drop_banding(sh, inbox)
-    reqs.append(_banding(inbox, 0, max(n_rows + 1, 2)))
+    reqs.append(_banding(inbox, 0, max(n_rows + offset + 1, 2)))
     if n_rows:
         # Only add checkboxes where there are rows. Forcing a minimum of one
         # leaves a stray ticked-looking cell on an empty tab.
         reqs.append({"setDataValidation": {
-            "range": {"sheetId": sid, "startRowIndex": 1,
-                      "endRowIndex": n_rows + 1,
+            "range": {"sheetId": sid, "startRowIndex": 1 + offset,
+                      "endRowIndex": n_rows + offset + 1,
                       "startColumnIndex": 0, "endColumnIndex": 1},
             "rule": {"condition": {"type": "BOOLEAN"}, "showCustomUi": True}}})
     reqs += [
@@ -217,13 +216,15 @@ def _format_inbox(sh, inbox, n_rows: int) -> None:
     if n_rows:
         # Institution bold, matching the Applications tab.
         reqs.append({"repeatCell": {
-            "range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": n_rows + 1,
+            "range": {"sheetId": sid, "startRowIndex": 1 + offset,
+                      "endRowIndex": n_rows + offset + 1,
                       "startColumnIndex": col(INBOX_HEADERS, "Institution"),
                       "endColumnIndex": col(INBOX_HEADERS, "Institution") + 1},
             "cell": {"userEnteredFormat": {"textFormat": {"bold": True, "fontSize": 10}}},
             "fields": "userEnteredFormat.textFormat"}})
         reqs.append({"repeatCell": {
-            "range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": n_rows + 1,
+            "range": {"sheetId": sid, "startRowIndex": 1 + offset,
+                      "endRowIndex": n_rows + offset + 1,
                       "startColumnIndex": 0, "endColumnIndex": 1},
             "cell": {"userEnteredFormat": {"horizontalAlignment": "CENTER"}},
             "fields": "userEnteredFormat.horizontalAlignment"}})
@@ -430,5 +431,5 @@ def stamp_last_updated(apps, note: str = "") -> None:
     This is how you answer "did the nightly job work?" without leaving the
     spreadsheet, which is the only place you actually work.
     """
-    text = C.today() + (f"  ·  {note}" if note else "")
-    apps.update(values=[[text]], range_name="B1", value_input_option="USER_ENTERED")
+    apps.update(values=[[note or C.today()]], range_name="B1",
+                value_input_option="USER_ENTERED")

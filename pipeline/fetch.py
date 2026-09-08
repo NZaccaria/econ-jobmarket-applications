@@ -145,10 +145,21 @@ def main() -> int:
         import sheet
         # Record the run in the sheet itself. Without this the only evidence a
         # nightly run happened lives in GitHub, which is not where you work.
-        note = (f"{len(new_uids)} new, {len(pending)} to review, "
-                f"{len(catalog)} tracked")
-        sheet.push_inbox(cfg, pending, parked,
-                         note=f"Nothing new. Last checked {C.today()}.")
+        #
+        # "Last checked" alone is nearly useless: by construction it is always
+        # yesterday. What tells you something is when a listing LAST ARRIVED,
+        # which is the newest first_seen in the catalogue. So the line reports
+        # both: that the job ran, and how long the market has been quiet.
+        seen_dates = [r["first_seen"] for r in catalog.values() if r.get("first_seen")]
+        last_new = max(seen_dates) if seen_dates else "never"
+        waiting = len(pending)
+        if new_uids:
+            note = (f"Checked {C.today()}  ·  {len(new_uids)} new today"
+                    f"  ·  {waiting} waiting")
+        else:
+            note = (f"Checked {C.today()}  ·  nothing new since {last_new}"
+                    f"  ·  {waiting} waiting")
+        sheet.push_inbox(cfg, pending, parked, note=note)
         sheet.stamp_last_updated(C.open_sheet().worksheet(sheet.APPS), note)
         print(f"   Inbox updated ({len(pending)} rows), Parked ({len(parked)})")
     return 0
