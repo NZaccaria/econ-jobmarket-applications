@@ -322,6 +322,24 @@ def test_apps_script_never_writes_notes():
     assert "'Notes': ''" in gs
 
 
+def test_apps_script_button_ignores_the_status_row():
+    """Run the real AppsScript.gs in node against a stubbed spreadsheet.
+
+    The button is the path actually used day to day, and none of the Python
+    tests can reach it. Skipped when node is unavailable.
+    """
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        import pytest
+        pytest.skip("node not installed")
+    here = Path(__file__).resolve().parent
+    r = subprocess.run([node, str(here / "test_appsscript.js"), str(here / "AppsScript.gs")],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
 if __name__ == "__main__":
     import traceback
     fns = [(n, f) for n, f in sorted(globals().items())

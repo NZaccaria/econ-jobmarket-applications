@@ -87,7 +87,12 @@ def main() -> int:
     # Redraw both tabs so the Inbox is empty and Parked reflects the new state.
     pending = [r for r in catalog.values() if r.get("status") == C.NEW]
     parked = [r for r in catalog.values() if r.get("status") == C.PARKED]
-    S.push_inbox(cfg, pending, parked)
+    # Keep the invariant that the Inbox always carries a status line. Without
+    # it, the tab is blank straight after a promote, which is the same
+    # ambiguity the line exists to remove.
+    note = (f"Promoted {added}, parked {len(to_park)} on {C.today()}"
+            f"  ·  {len(pending)} waiting")
+    S.push_inbox(cfg, pending, parked, note=note)
     S.stamp_last_updated(apps)
 
     print(f"\n   added {added} rows to Applications")
