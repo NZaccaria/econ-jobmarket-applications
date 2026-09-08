@@ -269,6 +269,33 @@ def test_column_widths_reference_real_headers():
             assert name in headers, f"{name!r} is not a header"
 
 
+class _FakeSheet:
+    def __init__(self, values): self._v = values
+    def get_all_values(self): return self._v
+
+
+def test_status_placeholder_is_never_treated_as_a_listing():
+    """An empty Inbox shows a "Nothing new" row so you can tell the difference
+    between no openings and a job that never ran. It carries no uid, so neither
+    read_ticks nor the Apps Script can ever promote it."""
+    import sheet as S
+    placeholder = S.row_from(S.INBOX_HEADERS,
+                             {"Institution": "Nothing new. Last checked 2026-09-08."})
+    assert placeholder[S.col(S.INBOX_HEADERS, "uid")] == ""
+    assert placeholder[S.col(S.INBOX_HEADERS, "Apply?")] == ""
+    ticks = S.read_ticks(_FakeSheet([S.INBOX_HEADERS, placeholder]))
+    assert ticks == {}, f"placeholder leaked into ticks: {ticks}"
+
+
+def test_read_ticks_reads_real_rows():
+    """Guard the other side: a real row must still be read correctly."""
+    import sheet as S
+    row = S.row_from(S.INBOX_HEADERS, {"Apply?": "TRUE", "uid": "joe:1", "Institution": "X"})
+    assert S.read_ticks(_FakeSheet([S.INBOX_HEADERS, row])) == {"joe:1": True}
+    row2 = S.row_from(S.INBOX_HEADERS, {"Apply?": "FALSE", "uid": "joe:2"})
+    assert S.read_ticks(_FakeSheet([S.INBOX_HEADERS, row2])) == {"joe:2": False}
+
+
 def test_apps_script_headers_exist_in_python():
     """The spreadsheet button resolves columns by header NAME, so the names it
     needs must exist in sheet.py. Renaming a header there would otherwise break

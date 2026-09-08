@@ -143,7 +143,13 @@ def main() -> int:
 
     if not args.no_sheet:
         import sheet
-        sheet.push_inbox(cfg, pending, parked)
+        # Record the run in the sheet itself. Without this the only evidence a
+        # nightly run happened lives in GitHub, which is not where you work.
+        note = (f"{len(new_uids)} new, {len(pending)} to review, "
+                f"{len(catalog)} tracked")
+        sheet.push_inbox(cfg, pending, parked,
+                         note=f"Nothing new. Last checked {C.today()}.")
+        sheet.stamp_last_updated(C.open_sheet().worksheet(sheet.APPS), note)
         print(f"   Inbox updated ({len(pending)} rows), Parked ({len(parked)})")
     return 0
 

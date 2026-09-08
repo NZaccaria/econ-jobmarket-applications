@@ -129,16 +129,18 @@ def read_ticks(inbox) -> dict[str, bool]:
     return out
 
 
-def push_inbox(cfg, pending: list[dict], parked: list[dict] | None = None) -> None:
+def push_inbox(cfg, pending: list[dict], parked: list[dict] | None = None,
+               note: str = "") -> None:
     """Rewrite the Inbox, and the Parked tab when parked rows are supplied."""
     sh = C.open_sheet()
     _, inbox = ensure_tabs(sh)
-    _write_rows(sh, inbox, pending, default_tick=True)
+    _write_rows(sh, inbox, pending, default_tick=True, note=note)
     if parked is not None:
         _write_rows(sh, sh.worksheet(PARKED), parked, default_tick=False)
 
 
-def _write_rows(sh, ws, pending: list[dict], default_tick: bool) -> None:
+def _write_rows(sh, ws, pending: list[dict], default_tick: bool,
+                note: str = "") -> None:
     previous = read_ticks(ws)
 
     # The collapsed twin is not shown: its opening is represented by the
@@ -174,10 +176,18 @@ def _write_rows(sh, ws, pending: list[dict], default_tick: bool) -> None:
             "Added": r.get("first_seen", ""), "uid": uid,
         }))
 
+    # An empty Inbox is ambiguous: nothing new, or the job never ran? Say so
+    # in the tab itself, since that is the only place the answer is looked for.
+    placeholder = not body and note
+    if placeholder:
+        body = [row_from(INBOX_HEADERS, {"Institution": note})]
+
     ws.clear()
     ws.update(values=[INBOX_HEADERS] + body, range_name="A1",
               value_input_option="USER_ENTERED")
-    _format_inbox(sh, ws, len(body))
+    # n_rows 0 for a placeholder: it must not get a tickbox, and it carries no
+    # uid so read_ticks and the Apps Script both ignore it.
+    _format_inbox(sh, ws, 0 if placeholder else len(body))
 
 
 def _format_inbox(sh, inbox, n_rows: int) -> None:
@@ -414,6 +424,11 @@ def append_applications(records: list[dict]) -> int:
     return len(body)
 
 
-def stamp_last_updated(apps) -> None:
-    """Cell B1 of the tracker, so your supervisors can see it is current."""
-    apps.update(values=[[C.today()]], range_name="B1", value_input_option="USER_ENTERED")
+def stamp_last_updated(apps, note: str = "") -> None:
+    """Cell B1 of the tracker: when the pipeline last ran, and what it found.
+
+    This is how you answer "did the nightly job work?" without leaving the
+    spreadsheet, which is the only place you actually work.
+    """
+    text = C.today() + (f"  ·  {note}" if note else "")
+    apps.update(values=[[text]], range_name="B1", value_input_option="USER_ENTERED")
