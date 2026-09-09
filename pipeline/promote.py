@@ -93,7 +93,6 @@ def main() -> int:
     note = (f"Promoted {added}, parked {len(to_park)} on {C.today()}"
             f"  ·  {len(pending)} waiting")
     S.push_inbox(cfg, pending, parked, note=note)
-    S.stamp_last_updated(apps)
 
     print(f"\n   added {added} rows to Applications")
     print(f"   Inbox now {len(pending)}, Parked {len(parked)}")

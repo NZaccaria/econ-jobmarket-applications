@@ -95,7 +95,14 @@ function promoteTicked() {
   }
 
   writeRows_(parked, IM, fromParked.filter(function (r) { return !r.ticked; }).concat(toPark));
+
+  // Promoting always empties the Inbox: ticked rows went to Applications,
+  // unticked ones to Parked. Leave a line saying so.
   writeRows_(inbox, IM, []);
+  var today = Utilities.formatDate(new Date(),
+      ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  writeStatus_(inbox, IM, 'Promoted ' + fresh.length + ', parked ' +
+               toPark.length + ' on ' + today + '  ·  0 waiting');
 
   ss.toast(fresh.length + ' promoted, ' + toPark.length + ' parked', 'Job Market', 5);
 }
@@ -112,12 +119,34 @@ function readRows_(sheet, IM) {
     });
 }
 
-function writeRows_(sheet, IM, rows) {
-  var width = sheet.getLastColumn();
+/**
+ * Empty a tab's body. Rows are DELETED, not cleared: clearContent() leaves the
+ * tickboxes and the row colouring behind, so an emptied Inbox looked like a
+ * list whose text had been rubbed out.
+ */
+function clearBody_(sheet) {
   var last = sheet.getLastRow();
   if (last > TAB_HEADER_ROW) {
-    sheet.getRange(TAB_HEADER_ROW + 1, 1, last - TAB_HEADER_ROW, width).clearContent();
+    sheet.deleteRows(TAB_HEADER_ROW + 1, last - TAB_HEADER_ROW);
   }
+}
+
+/**
+ * One row saying what just happened. Not "nothing new today", which would be
+ * true by construction the instant you promote and therefore tells you nothing.
+ * It reports the action instead, and survives until the next nightly fetch
+ * replaces it. No uid and no tickbox, so it can never be promoted.
+ */
+function writeStatus_(sheet, IM, text) {
+  var width = sheet.getLastColumn();
+  var row = new Array(width).fill('');
+  row[IM['Institution'] - 1] = text;
+  sheet.getRange(TAB_HEADER_ROW + 1, 1, 1, width).setValues([row]);
+}
+
+function writeRows_(sheet, IM, rows) {
+  var width = sheet.getLastColumn();
+  clearBody_(sheet);
   if (!rows.length) return;
   var body = rows.map(function (r) {
     var out = r.row.slice(0, width);

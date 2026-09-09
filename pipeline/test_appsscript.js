@@ -31,7 +31,12 @@ function makeSheet(name, header, rows, headerRow){
   return {
     name, grid, id:1,
     getName(){return name;},
-    getLastRow(){return this.grid.length;},
+    getLastRow(){
+      let n = this.grid.length;
+      while (n > 0 && this.grid[n-1].every(c => c === "")) n--;   // trailing blanks
+      return n;
+    },
+    deleteRows(start, howMany){ this.grid.splice(start-1, howMany); },
     getLastColumn(){return header.length;},
     getRange(r,c,nr,nc){ const self=this; return {
       getValues(){ return self.grid.slice(r-1, r-1+(nr||1)).map(x=>x.slice(c-1, c-1+(nc||1))); },
@@ -50,12 +55,14 @@ const apps   = makeSheet("Applications", APP_HEADERS, [], 2);
 global.SpreadsheetApp = {
   getActiveSpreadsheet: () => ({
     getSheetByName: n => ({Inbox:inbox, Parked:parked, Applications:apps}[n]),
+    getSpreadsheetTimeZone: () => "Europe/Amsterdam",
     toast: (m)=>console.log("  toast:", m),
   }),
   getUi: () => ({ createMenu: () => ({addItem(){return this;}, addToUi(){}}),
                   alert: m => { console.log("  ALERT:", m); } }),
   newRichTextValue: () => ({ setText(){return this;}, setLinkUrl(){return this;}, build(){return {};} }),
 };
+global.Utilities = { formatDate: () => "2026-09-09" };
 eval(src);
 promoteTicked();
 
@@ -69,6 +76,18 @@ if (leaked) { console.error("FAIL: the status row was promoted"); process.exit(1
 if (written.length !== 1 || written[0][uidCol] !== "ejm:1") {
   console.error("FAIL: expected exactly the ticked listing"); process.exit(1); }
 console.log("  PASS: status row not promoted");
+// B2: the Inbox must end up as header + exactly one status row reporting the action
+const inboxBody = inbox.grid.slice(1).filter(r => r.some(c => c !== ""));
+console.log("  Inbox rows after promote:", inboxBody.length);
+if (inboxBody.length !== 1) {
+  console.error("FAIL: expected exactly one status row in the Inbox"); process.exit(1); }
+const statusText = String(inboxBody[0][INBOX_HEADERS.indexOf("Institution")]);
+console.log("     status row:", JSON.stringify(statusText));
+if (!/^Promoted \d+, parked \d+ on \d{4}-\d{2}-\d{2}/.test(statusText)) {
+  console.error("FAIL: status row does not report the action"); process.exit(1); }
+if (inboxBody[0][INBOX_HEADERS.indexOf("uid")] !== "") {
+  console.error("FAIL: status row must carry no uid"); process.exit(1); }
+
 const parkedRows = parked.grid.slice(1).filter(r => r.some(c => c !== ""));
 console.log("  rows written to Parked:", parkedRows.length,
   parkedRows.some(r=>String(r.join(" ")).includes("Checked 2026")) ? "FAIL: status leaked" : "(no status leak)");

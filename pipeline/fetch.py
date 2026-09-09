@@ -152,15 +152,20 @@ def main() -> int:
         # both: that the job ran, and how long the market has been quiet.
         seen_dates = [r["first_seen"] for r in catalog.values() if r.get("first_seen")]
         last_new = max(seen_dates) if seen_dates else "never"
-        waiting = len(pending)
         if new_uids:
-            note = (f"Checked {C.today()}  ·  {len(new_uids)} new today"
-                    f"  ·  {waiting} waiting")
+            stamp = f"{C.today()}  ·  {len(new_uids)} new today"
+        elif last_new == C.today():
+            # Listings did arrive today, just not in this run. Saying "nothing
+            # new since 2026-09-09" on 2026-09-09 reads as nonsense.
+            stamp = f"{C.today()}  ·  nothing new in this run"
         else:
-            note = (f"Checked {C.today()}  ·  nothing new since {last_new}"
-                    f"  ·  {waiting} waiting")
+            stamp = f"{C.today()}  ·  nothing new since {last_new}"
+        # B1 carries ONLY facts about this fetch, so nothing you do afterwards
+        # can make it wrong. The waiting count changes the moment you promote,
+        # so it belongs in the Inbox status row and nowhere else.
+        note = f"{stamp}  ·  {len(pending)} waiting"
         sheet.push_inbox(cfg, pending, parked, note=note)
-        sheet.stamp_last_updated(C.open_sheet().worksheet(sheet.APPS), note)
+        sheet.stamp_last_updated(C.open_sheet().worksheet(sheet.APPS), stamp)
         print(f"   Inbox updated ({len(pending)} rows), Parked ({len(parked)})")
     return 0
 
