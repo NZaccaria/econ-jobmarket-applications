@@ -123,11 +123,29 @@ function readRows_(sheet, IM) {
  * Empty a tab's body. Rows are DELETED, not cleared: clearContent() leaves the
  * tickboxes and the row colouring behind, so an emptied Inbox looked like a
  * list whose text had been rubbed out.
+ *
+ * Google refuses to delete EVERY non-frozen row ("Sorry, it is not possible to
+ * delete all non-frozen rows"). That is reachable here, and was hit in
+ * practice: deleting shrinks the grid, the next write grows it back to exactly
+ * fit, and after enough rounds the grid is precisely as tall as its content,
+ * so the rows to delete ARE all the non-frozen ones. One row is therefore
+ * always kept and blanked instead.
  */
 function clearBody_(sheet) {
-  var last = sheet.getLastRow();
-  if (last > TAB_HEADER_ROW) {
-    sheet.deleteRows(TAB_HEADER_ROW + 1, last - TAB_HEADER_ROW);
+  var first = TAB_HEADER_ROW + 1;
+  var below = sheet.getMaxRows() - TAB_HEADER_ROW;
+  if (below <= 0) return;
+  if (below > 1) sheet.deleteRows(first + 1, below - 1);
+  var keep = sheet.getRange(first, 1, 1, sheet.getMaxColumns());
+  keep.clearContent();
+  keep.clearDataValidations();
+}
+
+/** Grow the grid before writing into it; deleting rows really does remove them. */
+function ensureRows_(sheet, needed) {
+  var below = sheet.getMaxRows() - TAB_HEADER_ROW;
+  if (below < needed) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), needed - below);
   }
 }
 
@@ -139,6 +157,7 @@ function clearBody_(sheet) {
  */
 function writeStatus_(sheet, IM, text) {
   var width = sheet.getLastColumn();
+  ensureRows_(sheet, 1);
   var row = new Array(width).fill('');
   row[IM['Institution'] - 1] = text;
   sheet.getRange(TAB_HEADER_ROW + 1, 1, 1, width).setValues([row]);
@@ -148,6 +167,7 @@ function writeRows_(sheet, IM, rows) {
   var width = sheet.getLastColumn();
   clearBody_(sheet);
   if (!rows.length) return;
+  ensureRows_(sheet, rows.length);
   var body = rows.map(function (r) {
     var out = r.row.slice(0, width);
     out[IM['Apply?'] - 1] = false;      // nothing is pre-ticked once parked

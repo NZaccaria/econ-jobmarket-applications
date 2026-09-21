@@ -183,6 +183,13 @@ def _write_rows(sh, ws, pending: list[dict], default_tick: bool,
     # it is excluded from the tickbox range.
     status = [row_from(INBOX_HEADERS, {"Institution": note})] if note else []
 
+    # Leave spare rows below the content. A tab whose grid is exactly as tall
+    # as its content cannot have its body deleted at all: Google refuses to
+    # delete every non-frozen row, which is how the Promote button broke once.
+    needed = len(status) + len(body) + 1
+    if ws.row_count < needed + 20:
+        ws.add_rows(needed + 100 - ws.row_count)
+
     ws.clear()
     ws.update(values=[INBOX_HEADERS] + status + body, range_name="A1",
               value_input_option="USER_ENTERED")

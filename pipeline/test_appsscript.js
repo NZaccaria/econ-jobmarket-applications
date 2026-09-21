@@ -24,32 +24,54 @@ const ticked    = row(INBOX_HEADERS, {"Apply?":true, Bucket:"A", Score:46, Sourc
 const unticked  = row(INBOX_HEADERS, {"Apply?":false, Bucket:"skip", Source:"JoE",
                                       Institution:"Some Adjunct Post", uid:"joe:2"});
 
-function makeSheet(name, header, rows, headerRow){
+function makeSheet(name, header, rows, headerRow, maxRows){
   const grid = [];
   for (let i=1;i<headerRow;i++) grid.push(new Array(header.length).fill(""));
   grid.push(header); rows.forEach(r=>grid.push(r));
+  // A real sheet has a row COUNT independent of how many rows hold content.
+  let max = maxRows === undefined ? 1000 : maxRows;
+  while (grid.length < max) grid.push(new Array(header.length).fill(""));
   return {
-    name, grid, id:1,
+    name, grid, id:1, frozen: headerRow,
+    getMaxRows(){ return this.grid.length; },
+    getMaxColumns(){ return header.length; },
+    insertRowsAfter(after, how){
+      for (let i=0;i<how;i++) this.grid.splice(after+i, 0, new Array(header.length).fill(""));
+    },
     getName(){return name;},
     getLastRow(){
       let n = this.grid.length;
       while (n > 0 && this.grid[n-1].every(c => c === "")) n--;   // trailing blanks
       return n;
     },
-    deleteRows(start, howMany){ this.grid.splice(start-1, howMany); },
+    deleteRows(start, howMany){
+      // Google refuses this exact case; the button hit it in production.
+      if (start <= this.frozen + 1 && howMany >= this.grid.length - this.frozen) {
+        throw new Error("Sorry, it is not possible to delete all non-frozen rows.");
+      }
+      this.grid.splice(start-1, howMany);
+    },
     getLastColumn(){return header.length;},
     getRange(r,c,nr,nc){ const self=this; return {
       getValues(){ return self.grid.slice(r-1, r-1+(nr||1)).map(x=>x.slice(c-1, c-1+(nc||1))); },
-      setValues(v){ v.forEach((rw,i)=>{ self.grid[r-1+i] = rw.slice(); }); return this; },
+      setValues(v){
+        if (r-1+v.length > self.grid.length) throw new Error("Those rows are out of bounds.");
+        v.forEach((rw,i)=>{ self.grid[r-1+i] = rw.slice(); }); return this; },
       clearContent(){ for(let i=0;i<(nr||1);i++) self.grid[r-1+i]=new Array(header.length).fill(""); },
+      clearDataValidations(){ return this; },
       insertCheckboxes(){ return this; }, setHorizontalAlignment(){ return this; },
       setFontSize(){ return this; }, setFontWeight(){ return this; },
       setRichTextValues(){ return this; },
     };},
   };
 }
-const inbox  = makeSheet("Inbox",  INBOX_HEADERS, [statusRow, ticked, unticked], 1);
-const parked = makeSheet("Parked", INBOX_HEADERS, [], 1);
+const inbox  = makeSheet("Inbox",  INBOX_HEADERS, [statusRow, ticked, unticked], 1, 4);
+// Reproduces production: Parked's grid is exactly as tall as its content.
+const parkedRowsExisting = [];
+for (let i=0;i<4;i++) parkedRowsExisting.push(row(INBOX_HEADERS,
+  {"Apply?":false, Institution:"Old parked "+i, uid:"joe:old"+i}));
+const parked = makeSheet("Parked", INBOX_HEADERS, parkedRowsExisting, 1,
+                         1 + parkedRowsExisting.length);
 const apps   = makeSheet("Applications", APP_HEADERS, [], 2);
 
 global.SpreadsheetApp = {
@@ -92,4 +114,8 @@ const parkedRows = parked.grid.slice(1).filter(r => r.some(c => c !== ""));
 console.log("  rows written to Parked:", parkedRows.length,
   parkedRows.some(r=>String(r.join(" ")).includes("Checked 2026")) ? "FAIL: status leaked" : "(no status leak)");
 if (parkedRows.some(r=>String(r.join(" ")).includes("Checked 2026"))) process.exit(1);
-if (parkedRows.length !== 1) { console.error("FAIL: expected one parked row"); process.exit(1); }
+// 4 rows were already parked, plus the one unticked listing just parked.
+if (parkedRows.length !== parkedRowsExisting.length + 1) {
+  console.error("FAIL: expected " + (parkedRowsExisting.length + 1) + " parked rows");
+  process.exit(1); }
+console.log("  PASS: grid exactly full did not break the delete");
