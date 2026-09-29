@@ -105,7 +105,17 @@ def main() -> int:
     # hand) is respected, instead of being undone by the next fetch.
     if not args.no_sheet:
         import sheet
-        decided = sheet.decisions()
+        # A dry run must work with no credentials at all: it writes nothing, so
+        # needing a Google key to produce a report is just an obstacle. When the
+        # sheet is unreachable, statuses fall back to the local catalogue and the
+        # run says so rather than dying.
+        try:
+            decided = sheet.decisions()
+        except SystemExit:
+            if not args.dry_run:
+                raise
+            print("   (no sheet access: statuses read from the local catalog)")
+            decided = {}
         for uid, decision in decided.items():
             if uid in catalog:
                 catalog[uid]["status"] = decision
