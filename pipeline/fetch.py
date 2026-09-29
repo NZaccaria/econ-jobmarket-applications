@@ -91,7 +91,10 @@ def main() -> int:
             rec["status"] = C.NEW
             rec["first_seen"] = today
             new_uids.append(uid)
-            if full:
+            # --dry-run must leave no trace: writing the ad bodies here happened
+            # before the dry-run check below, so a "writes nothing" run left
+            # hundreds of untracked files behind.
+            if full and not args.dry_run:
                 (C.ads_dir(cfg) / f"{uid.replace(':', '_')}.txt").write_text(full, encoding="utf-8")
         rec["last_seen"] = today
         catalog[uid] = rec
